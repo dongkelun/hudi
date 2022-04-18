@@ -437,6 +437,7 @@ public abstract class AbstractHoodieWriteClient<T extends HoodieRecordPayload, I
       // We cannot have unbounded commit files. Archive commits if we have to archive
       HoodieTimelineArchiveLog archiveLog = new HoodieTimelineArchiveLog(config, table);
       archiveLog.archiveIfRequired(context);
+      // commit期间执行自动清理
       autoCleanOnCommit();
       if (operationType != null && operationType != WriteOperationType.CLUSTER && operationType != WriteOperationType.COMPACT) {
         syncTableMetadata();
@@ -493,15 +494,16 @@ public abstract class AbstractHoodieWriteClient<T extends HoodieRecordPayload, I
    *
    */
   protected void autoCleanOnCommit() {
-    if (config.isAutoClean()) {
+    if (config.isAutoClean()) { // 默认true
       // Call clean to cleanup if there is anything to cleanup after the commit,
-      if (config.isAsyncClean()) {
+      if (config.isAsyncClean()) { // 默认false
         LOG.info("Cleaner has been spawned already. Waiting for it to finish");
         AsyncCleanerService.waitForCompletion(asyncCleanerService);
         LOG.info("Cleaner has finished");
       } else {
         // Do not reuse instantTime for clean as metadata table requires all changes to have unique instant timestamps.
         LOG.info("Auto cleaning is enabled. Running cleaner now");
+        // 执行clean操作
         clean();
       }
     }
@@ -650,13 +652,18 @@ public abstract class AbstractHoodieWriteClient<T extends HoodieRecordPayload, I
    */
   public HoodieCleanMetadata clean(String cleanInstantTime, boolean scheduleInline) throws HoodieIOException {
     if (scheduleInline) {
+      // 主要逻辑为：创建.clean.requested
+      // .clean.requested内容为序列化后的（包含了要删除的文件列表等信息的）cleanerPlan
       scheduleTableServiceInternal(cleanInstantTime, Option.empty(), TableServiceType.CLEAN);
     }
     LOG.info("Cleaner started");
     final Timer.Context timerContext = metrics.getCleanCtx();
     LOG.info("Cleaned failed attempts if any");
+    // 判断是否执行rollback,默认策略为EAGER，clean期间不执行rollback
     CleanerUtils.rollbackFailedWrites(config.getFailedWritesCleanPolicy(),
         HoodieTimeline.CLEAN_ACTION, () -> rollbackFailedWrites());
+    // 执行table.clean,删除需要删除的文件，转化.clean.requested=>.clean.inflight=>.clean,返回HoodieCleanMetadata
+    // 这里为HoodieJavaCopyOnWriteTable.clean
     HoodieCleanMetadata metadata = createTable(config, hadoopConf).clean(context, cleanInstantTime);
     if (timerContext != null && metadata != null) {
       long durationMs = metrics.getDurationInMs(timerContext.stop());
@@ -665,6 +672,7 @@ public abstract class AbstractHoodieWriteClient<T extends HoodieRecordPayload, I
           + " Earliest Retained Instant :" + metadata.getEarliestCommitToRetain()
           + " cleanerElapsedMs" + durationMs);
     }
+    // 返回metadata
     return metadata;
   }
 
@@ -957,6 +965,7 @@ public abstract class AbstractHoodieWriteClient<T extends HoodieRecordPayload, I
         return compactionPlan.isPresent() ? Option.of(instantTime) : Option.empty();
       case CLEAN:
         LOG.info("Scheduling cleaning at instant time :" + instantTime);
+        // 这里在子类`HoodieJavaCopyOnWriteTable.scheduleCleaning`实现
         Option<HoodieCleanerPlan> cleanerPlan = createTable(config, hadoopConf)
             .scheduleCleaning(context, instantTime, extraMetadata);
         return cleanerPlan.isPresent() ? Option.of(instantTime) : Option.empty();

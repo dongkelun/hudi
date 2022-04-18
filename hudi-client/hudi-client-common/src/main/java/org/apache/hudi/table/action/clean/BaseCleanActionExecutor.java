@@ -81,6 +81,7 @@ public abstract class BaseCleanActionExecutor<T extends HoodieRecordPayload, I, 
    */
   HoodieCleanMetadata runPendingClean(HoodieTable<T, I, K, O> table, HoodieInstant cleanInstant) {
     try {
+      // 将.clean.requested或者.clean.inflight反序列为cleanerPlan
       HoodieCleanerPlan cleanerPlan = CleanerUtils.getCleanerPlan(table.getMetaClient(), cleanInstant);
       return runClean(table, cleanInstant, cleanerPlan);
     } catch (IOException e) {
@@ -97,24 +98,27 @@ public abstract class BaseCleanActionExecutor<T extends HoodieRecordPayload, I, 
       final HoodieTimer timer = new HoodieTimer();
       timer.startTimer();
       if (cleanInstant.isRequested()) {
+        // 如果是.clean.requested,转化为.clean.inflight
         inflightInstant = table.getActiveTimeline().transitionCleanRequestedToInflight(cleanInstant,
             TimelineMetadataUtils.serializeCleanerPlan(cleanerPlan));
       } else {
         inflightInstant = cleanInstant;
       }
-
+      // 执行clean方法，主要是删除文件，返回HoodieCleanStat列表
+      // 具体在实现类，这里是JavaCleanActionExecutor
       List<HoodieCleanStat> cleanStats = clean(context, cleanerPlan);
       if (cleanStats.isEmpty()) {
         return HoodieCleanMetadata.newBuilder().build();
       }
 
       table.getMetaClient().reloadActiveTimeline();
+      // 构建HoodieCleanMetadata
       HoodieCleanMetadata metadata = CleanerUtils.convertCleanMetadata(
           inflightInstant.getTimestamp(),
           Option.of(timer.endTimer()),
           cleanStats
       );
-
+      // 生成.clean,并将metadata序列化到.clean
       table.getActiveTimeline().transitionCleanInflightToComplete(inflightInstant,
           TimelineMetadataUtils.serializeCleanMetadata(metadata));
       LOG.info("Marked clean started on " + inflightInstant.getTimestamp() + " as complete");
@@ -128,6 +132,9 @@ public abstract class BaseCleanActionExecutor<T extends HoodieRecordPayload, I, 
   public HoodieCleanMetadata execute() {
     List<HoodieCleanMetadata> cleanMetadataList = new ArrayList<>();
     // If there are inflight(failed) or previously requested clean operation, first perform them
+    // 获取状态为inflight或者requested的clean instant
+    // 因为我们前面创建了.clean.requested所以首先包含前面创建的.requested
+    // 如果还有其他的.clean.inflight文件，这表明是之前失败的操作，也需要执行clean
     List<HoodieInstant> pendingCleanInstants = table.getCleanTimeline()
         .filterInflightsAndRequested().getInstants().collect(Collectors.toList());
     if (pendingCleanInstants.size() > 0) {
@@ -142,6 +149,7 @@ public abstract class BaseCleanActionExecutor<T extends HoodieRecordPayload, I, 
       table.getMetaClient().reloadActiveTimeline();
     }
     // return the last clean metadata for now
+    // 返回最后一个cleanMetadata
     // TODO (NA) : Clean only the earliest pending clean just like how we do for other table services
     // This requires the BaseCleanActionExecutor to be refactored as BaseCommitActionExecutor
     return cleanMetadataList.size() > 0 ? cleanMetadataList.get(cleanMetadataList.size() - 1) : null;

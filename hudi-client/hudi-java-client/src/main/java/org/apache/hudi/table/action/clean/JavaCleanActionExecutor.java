@@ -61,10 +61,10 @@ public class JavaCleanActionExecutor<T extends HoodieRecordPayload> extends
 
   @Override
   List<HoodieCleanStat> clean(HoodieEngineContext context, HoodieCleanerPlan cleanerPlan) {
-
+    // 需要被删除的文件列表
     Iterator<ImmutablePair<String, CleanFileInfo>> filesToBeDeletedPerPartition = cleanerPlan.getFilePathsToBeDeletedPerPartition().entrySet().stream()
         .flatMap(x -> x.getValue().stream().map(y -> new ImmutablePair<>(x.getKey(), new CleanFileInfo(y.getFilePath(), y.getIsBootstrapBaseFile())))).iterator();
-
+    // 通过deleteFilesFunc函数执行删除文件操作，返回PartitionCleanStat
     Stream<Pair<String, PartitionCleanStat>> partitionCleanStats =
         deleteFilesFunc(filesToBeDeletedPerPartition, table)
             .collect(Collectors.groupingBy(Pair::getLeft))
@@ -107,6 +107,7 @@ public class JavaCleanActionExecutor<T extends HoodieRecordPayload> extends
       String deletePathStr = deletePath.toString();
       Boolean deletedFileResult = null;
       try {
+        // 删除文件返回是否删除成功
         deletedFileResult = deleteFileAndGetResult(fs, deletePathStr);
       } catch (IOException e) {
         LOG.error("Delete file failed");

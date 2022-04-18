@@ -115,6 +115,7 @@ public class CleanPlanner<T extends HoodieRecordPayload, I, K, O> implements Ser
 
   /**
    * Returns list of partitions where clean operations needs to be performed.
+   * 返回清理操作需要执行的分区列表
    *
    * @param earliestRetainedInstant New instant to be retained after this cleanup operation
    * @return list of partitions to scan for cleaning
@@ -380,6 +381,7 @@ public class CleanPlanner<T extends HoodieRecordPayload, I, K, O> implements Ser
 
   /**
    * Returns files to be cleaned for the given partitionPath based on cleaning policy.
+   * 基于清理策略根据给出的分区路径返回需要被清理的文件列表
    */
   public List<CleanFileInfo> getDeletePaths(String partitionPath) {
     HoodieCleaningPolicy policy = config.getCleanerPolicy();
@@ -398,6 +400,7 @@ public class CleanPlanner<T extends HoodieRecordPayload, I, K, O> implements Ser
 
   /**
    * Returns earliest commit to retain based on cleaning policy.
+   * 根据清理策略返回最早的需要保留的commit
    */
   public Option<HoodieInstant> getEarliestCommitToRetain() {
     Option<HoodieInstant> earliestCommitToRetain = Option.empty();

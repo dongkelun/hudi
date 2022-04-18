@@ -62,6 +62,7 @@ public abstract class BaseCleanPlanActionExecutor<T extends HoodieRecordPayload,
 
   /**
    * Generates List of files to be cleaned.
+   * 生成需要被清理的文件列表
    *
    * @param context HoodieEngineContext
    * @return Cleaner Plan
@@ -69,24 +70,34 @@ public abstract class BaseCleanPlanActionExecutor<T extends HoodieRecordPayload,
   HoodieCleanerPlan requestClean(HoodieEngineContext context) {
     try {
       CleanPlanner<T, I, K, O> planner = new CleanPlanner<>(context, table, config);
+      // 获取最早需要保留的HoodieInstant
       Option<HoodieInstant> earliestInstant = planner.getEarliestCommitToRetain();
+      // 获取需要被清理的分区路径
       List<String> partitionsToClean = planner.getPartitionPathsToClean(earliestInstant);
 
       if (partitionsToClean.isEmpty()) {
+        // 如果分区路径为空，直接返回一个空的HoodieCleanerPlan
         LOG.info("Nothing to clean here. It is already clean");
         return HoodieCleanerPlan.newBuilder().setPolicy(HoodieCleaningPolicy.KEEP_LATEST_COMMITS.name()).build();
       }
       LOG.info("Total Partitions to clean : " + partitionsToClean.size() + ", with policy " + config.getCleanerPolicy());
+      // 清理的并发度
       int cleanerParallelism = Math.min(partitionsToClean.size(), config.getCleanerParallelism());
       LOG.info("Using cleanerParallelism: " + cleanerParallelism);
 
       context.setJobStatus(this.getClass().getSimpleName(), "Generates list of file slices to be cleaned");
-
+      // Map<分区路径,要删除的文件列表>, 真正的实现是在planner.getDeletePaths
       Map<String, List<HoodieCleanFileInfo>> cleanOps = context
           .map(partitionsToClean, partitionPathToClean -> Pair.of(partitionPathToClean, planner.getDeletePaths(partitionPathToClean)), cleanerParallelism)
           .stream()
           .collect(Collectors.toMap(Pair::getKey, y -> CleanerUtils.convertToHoodieCleanFileInfoList(y.getValue())));
 
+      // 构造HoodieCleanerPlan并返回，参数分别：
+      // earliestInstantToRetain = 根据earliestInstant生成的HoodieActionInstant
+      // policy = config.getCleanerPolicy().name()
+      // filesToBeDeletedPerPartition = CollectionUtils.createImmutableMap() 一个空的只读的map
+      // version = 2
+      // filePathsToBeDeletedPerPartition = cleanOps,即上面我们获取的要删除的文件列表
       return new HoodieCleanerPlan(earliestInstant
           .map(x -> new HoodieActionInstant(x.getTimestamp(), x.getAction(), x.getState().name())).orElse(null),
           config.getCleanerPolicy().name(), CollectionUtils.createImmutableMap(),
@@ -98,28 +109,37 @@ public abstract class BaseCleanPlanActionExecutor<T extends HoodieRecordPayload,
 
   /**
    * Creates a Cleaner plan if there are files to be cleaned and stores them in instant file.
+   * // 如果有需要被清理的文件，创建一个cleanerPlan，并且将它们保存到instant文件中
    * Cleaner Plan contains absolute file paths.
+   * cleanerPlan 包含文件的绝对路径
    *
    * @param startCleanTime Cleaner Instant Time
    * @return Cleaner Plan if generated
    */
   protected Option<HoodieCleanerPlan> requestClean(String startCleanTime) {
+    // cleanerPlan包含需要被清理的文件列表
     final HoodieCleanerPlan cleanerPlan = requestClean(context);
     if ((cleanerPlan.getFilePathsToBeDeletedPerPartition() != null)
         && !cleanerPlan.getFilePathsToBeDeletedPerPartition().isEmpty()
         && cleanerPlan.getFilePathsToBeDeletedPerPartition().values().stream().mapToInt(List::size).sum() > 0) {
+      // 如果要删除的文件列表不为空
       // Only create cleaner plan which does some work
+      // 创建.clean.requested
       final HoodieInstant cleanInstant = new HoodieInstant(HoodieInstant.State.REQUESTED, HoodieTimeline.CLEAN_ACTION, startCleanTime);
       // Save to both aux and timeline folder
       try {
+        // 保存.clean.requested，.clean.requested文件里包含了序列化的cleanerPlan，也就包含了文件列表等信息
+        // 后面删除文件时会用到
         table.getActiveTimeline().saveToCleanRequested(cleanInstant, TimelineMetadataUtils.serializeCleanerPlan(cleanerPlan));
         LOG.info("Requesting Cleaning with instant time " + cleanInstant);
       } catch (IOException e) {
         LOG.error("Got exception when saving cleaner requested file", e);
         throw new HoodieIOException(e.getMessage(), e);
       }
+      // 返回cleanerPlan
       return Option.of(cleanerPlan);
     }
+    // 返回空
     return Option.empty();
   }
 
