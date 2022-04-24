@@ -364,6 +364,11 @@ public class RemoteHoodieTableFileSystemView implements SyncableFileSystemView, 
 
   @Override
   public Stream<HoodieFileGroup> getAllFileGroups(String partitionPath) {
+    /**
+     * HashMap
+     *  "partition" -> "partitionPath"
+     *  "basepath" -> "basepath"
+     */
     Map<String, String> paramsMap = getParamsWithPartitionPath(partitionPath);
     try {
       List<FileGroupDTO> fileGroups = executeRequest(ALL_FILEGROUPS_FOR_PARTITION_URL, paramsMap,
@@ -388,8 +393,17 @@ public class RemoteHoodieTableFileSystemView implements SyncableFileSystemView, 
 
   @Override
   public Stream<HoodieFileGroup> getReplacedFileGroupsBefore(String maxCommitTime, String partitionPath) {
+    /**
+     * HashMap
+     *  "partition" -> "partitionPath"
+     *  "maxinstant" -> "earliestCommitToRetain"
+     *  "basepath" -> "basepath"
+     */
     Map<String, String> paramsMap = getParamsWithAdditionalParam(partitionPath, MAX_INSTANT_PARAM, maxCommitTime);
     try {
+      // 这里是通过HttpRequest.get api接口的方式实现的，接口为 `/v1/hoodie/view/filegroups/replaced/before/`
+      // 接口是在类`RequestHandler`添加的，具体的实现在`registerFileSlicesAPI`方法中，这一块还不太懂
+      // 这里（目前遇到的都是）返回的是空，以后再深入研究
       List<FileGroupDTO> fileGroups = executeRequest(ALL_REPLACED_FILEGROUPS_BEFORE, paramsMap,
           new TypeReference<List<FileGroupDTO>>() {}, RequestMethod.GET);
       return fileGroups.stream().map(dto -> FileGroupDTO.toFileGroup(dto, metaClient));

@@ -81,9 +81,10 @@ public interface HoodieTableMetadata extends Serializable, AutoCloseable {
 
   static HoodieTableMetadata create(HoodieEngineContext engineContext, HoodieMetadataConfig metadataConfig, String datasetBasePath,
                                     String spillableMapPath, boolean reuse) {
-    if (metadataConfig.enabled()) {
+    if (metadataConfig.enabled()) { // 默认false
       return new HoodieBackedTableMetadata(engineContext, metadataConfig, datasetBasePath, spillableMapPath, reuse);
     } else {
+      // 默认返回FileSystemBackedTableMetadata, assumeDatePartitioning 默认false
       return new FileSystemBackedTableMetadata(engineContext, new SerializableConfiguration(engineContext.getHadoopConf()),
           datasetBasePath, metadataConfig.shouldAssumeDatePartitioning());
     }

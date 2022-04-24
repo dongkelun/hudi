@@ -64,7 +64,7 @@ public class FileSystemBackedTableMetadata implements HoodieTableMetadata {
 
   @Override
   public List<String> getAllPartitionPaths() throws IOException {
-    if (assumeDatePartitioning) {
+    if (assumeDatePartitioning) { // 默认false
       FileSystem fs = new Path(datasetBasePath).getFileSystem(hadoopConf.get());
       return FSUtils.getAllPartitionFoldersThreeLevelsDown(fs, datasetBasePath);
     }
@@ -78,24 +78,35 @@ public class FileSystemBackedTableMetadata implements HoodieTableMetadata {
       int listingParallelism = Math.min(DEFAULT_LISTING_PARALLELISM, pathsToList.size());
 
       // List all directories in parallel
+      // 列出pathsToList里path的所有的一级文件及路径
       List<Pair<Path, FileStatus[]>> dirToFileListing = engineContext.map(pathsToList, path -> {
         FileSystem fileSystem = path.getFileSystem(hadoopConf.get());
         return Pair.of(path, fileSystem.listStatus(path));
       }, listingParallelism);
+      // 清空pathsToList
       pathsToList.clear();
 
       // If the listing reveals a directory, add it to queue. If the listing reveals a hoodie partition, add it to
       // the results.
       dirToFileListing.forEach(p -> {
+        // 过滤查找分区路径`HOODIE_PARTITION_METAFILE`即.hoodie_partition_metadata
         Option<FileStatus> partitionMetaFile = Option.fromJavaOptional(Arrays.stream(p.getRight()).parallel()
             .filter(fs -> fs.getPath().getName().equals(HoodiePartitionMetadata.HOODIE_PARTITION_METAFILE))
             .findFirst());
 
         if (partitionMetaFile.isPresent()) {
+          // 如果分区路径存在，那么代表当前遍历的路径是分区路径
+          // 即p.getLeft()，通过`getRelativePartitionPath`将相对路径添加到partitionPaths列表中
+          // 如果没有分区字段的话，当前路径也就是datasetBasePath就是分区路径，相对路径为空""
+          // 如果有分区字段，相对路径为所有的 `partitionField1=partitionField1Val/partitionField2=partitionField2Val/...`
+          // 这里假设是Hive格式的分区路径
           // Is a partition.
           String partitionName = FSUtils.getRelativePartitionPath(new Path(datasetBasePath), p.getLeft());
           partitionPaths.add(partitionName);
         } else {
+          // 如果当前路径下没有分区路径，那么继续遍历子路径，直到找到分区路径，或者遍历完所有的子路径
+          // 这里的子路径不包含`METAFOLDER_NAME`,即.hoodie
+          // 如果是有分区字段的话，需要遍历完所有的分区路径
           // Add sub-dirs to the queue
           pathsToList.addAll(Arrays.stream(p.getRight())
               .filter(fs -> fs.isDirectory() && !fs.getPath().getName().equals(HoodieTableMetaClient.METAFOLDER_NAME))
@@ -104,6 +115,7 @@ public class FileSystemBackedTableMetadata implements HoodieTableMetadata {
         }
       });
     }
+    // 返回分区路径列表
     return partitionPaths;
   }
 

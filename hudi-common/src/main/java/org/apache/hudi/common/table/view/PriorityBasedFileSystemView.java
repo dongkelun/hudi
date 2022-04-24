@@ -73,11 +73,13 @@ public class PriorityBasedFileSystemView implements SyncableFileSystemView, Seri
   }
 
   private <T1, R> R execute(T1 val, Function1<T1, R> preferredFunction, Function1<T1, R> secondaryFunction) {
-    if (errorOnPreferredView) {
+    if (errorOnPreferredView) { // 默认false
       LOG.warn("Routing request to secondary file-system view");
       return secondaryFunction.apply(val);
     } else {
       try {
+        // 这里调用的是`preferredView::getAllFileGroups`
+        // 即`RemoteHoodieTableFileSystemView.getAllFileGroups`
         return preferredFunction.apply(val);
       } catch (RuntimeException re) {
         LOG.error("Got error running preferred function. Trying secondary", re);
@@ -89,11 +91,16 @@ public class PriorityBasedFileSystemView implements SyncableFileSystemView, Seri
 
   private <T1, T2, R> R execute(T1 val, T2 val2, Function2<T1, T2, R> preferredFunction,
       Function2<T1, T2, R> secondaryFunction) {
-    if (errorOnPreferredView) {
+    if (errorOnPreferredView) { // 默认false
       LOG.warn("Routing request to secondary file-system view");
       return secondaryFunction.apply(val, val2);
     } else {
       try {
+        /**
+         * 对于getReplacedFileGroupsBefore：
+         *    这里调用的是`preferredView::getReplacedFileGroupsBefore`
+         *    即`RemoteHoodieTableFileSystemView.getReplacedFileGroupsBefore`
+         */
         return preferredFunction.apply(val, val2);
       } catch (RuntimeException re) {
         LOG.error("Got error running preferred function. Trying secondary", re);
@@ -200,6 +207,13 @@ public class PriorityBasedFileSystemView implements SyncableFileSystemView, Seri
   }
 
   @Override
+  /**
+   * 对于clean操作：
+   *    maxCommitTime 最早需要保留的commit
+   *    partitionPath 分区相对路径
+   *    preferredView org.apache.hudi.common.table.view.RemoteHoodieTableFileSystemView
+   *    secondaryView org.apache.hudi.common.table.view.HoodieTableFileSystemView
+   */
   public Stream<HoodieFileGroup> getReplacedFileGroupsBefore(String maxCommitTime, String partitionPath) {
     return execute(maxCommitTime, partitionPath, preferredView::getReplacedFileGroupsBefore, secondaryView::getReplacedFileGroupsBefore);
   }

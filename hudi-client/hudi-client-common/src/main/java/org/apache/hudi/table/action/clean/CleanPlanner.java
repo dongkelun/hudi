@@ -144,22 +144,30 @@ public class CleanPlanner<T extends HoodieRecordPayload, I, K, O> implements Ser
       return Collections.emptyList();
     }
 
-    if (config.incrementalCleanerModeEnabled()) {
+    if (config.incrementalCleanerModeEnabled()) { // 默认true
+      // 最后一个.clean
       Option<HoodieInstant> lastClean = hoodieTable.getCleanTimeline().filterCompletedInstants().lastInstant();
       if (lastClean.isPresent()) {
+        // 最后一个.clean存在，反序列生成`HoodieCleanMetadata`
         HoodieCleanMetadata cleanMetadata = TimelineMetadataUtils
             .deserializeHoodieCleanMetadata(hoodieTable.getActiveTimeline().getInstantDetails(lastClean.get()).get());
         if ((cleanMetadata.getEarliestCommitToRetain() != null)
             && (cleanMetadata.getEarliestCommitToRetain().length() > 0)) {
+          // 如果最后一个.clean存在earliestCommitToRetain
+          // 如果上一次clean操作执行成功的话会将上一次的earliestCommitToRetain序列化到.clean文件中
           return getPartitionPathsForIncrementalCleaning(cleanMetadata, instantToRetain);
         }
       }
     }
+    // 当instantToRetain不为空且是第一次clean时，调用getPartitionPathsForFullCleaning获取分区路径
+    // 这时和策略为KEEP_LATEST_FILE_VERSIONS时的逻辑一样，只不过KEEP_LATEST_FILE_VERSIONS不用instantToRetain非空
     return getPartitionPathsForFullCleaning();
   }
 
   /**
    * Use Incremental Mode for finding partition paths.
+   * 用增量模式查找分区路径
+   *
    * @param cleanMetadata
    * @param newInstantToRetain
    * @return
@@ -169,16 +177,21 @@ public class CleanPlanner<T extends HoodieRecordPayload, I, K, O> implements Ser
     LOG.info("Incremental Cleaning mode is enabled. Looking up partition-paths that have since changed "
         + "since last cleaned at " + cleanMetadata.getEarliestCommitToRetain()
         + ". New Instant to retain : " + newInstantToRetain);
+    // 过滤大于等于上次.clean保存的earliestCommitToRetain && 小于这次earliestCommitToRetain的commit
+    // 即我们要找出介于上次clean和这次clean之间的分区路径 [lastEarliestCommitToRetain,thisEarliestCommitToRetain)
     return hoodieTable.getCompletedCommitsTimeline().getInstants().filter(
         instant -> HoodieTimeline.compareTimestamps(instant.getTimestamp(), HoodieTimeline.GREATER_THAN_OR_EQUALS,
             cleanMetadata.getEarliestCommitToRetain()) && HoodieTimeline.compareTimestamps(instant.getTimestamp(),
             HoodieTimeline.LESSER_THAN, newInstantToRetain.get().getTimestamp())).flatMap(instant -> {
               try {
                 if (HoodieTimeline.REPLACE_COMMIT_ACTION.equals(instant.getAction())) {
+                  // 如果instant类型为`REPLACE_COMMIT_ACTION`,即`replacecommit`
+                  // 反序列化为HoodieReplaceCommitMetadata，并返回replaceCommitMetadata涉及的所有分区路径
                   HoodieReplaceCommitMetadata replaceCommitMetadata = HoodieReplaceCommitMetadata.fromBytes(
                       hoodieTable.getActiveTimeline().getInstantDetails(instant).get(), HoodieReplaceCommitMetadata.class);
                   return Stream.concat(replaceCommitMetadata.getPartitionToReplaceFileIds().keySet().stream(), replaceCommitMetadata.getPartitionToWriteStats().keySet().stream());
                 } else {
+                  // 否则，反序列化为HoodieCommitMetadata，返回commitMetadata所涉及的所有分区路径
                   HoodieCommitMetadata commitMetadata = HoodieCommitMetadata
                       .fromBytes(hoodieTable.getActiveTimeline().getInstantDetails(instant).get(),
                           HoodieCommitMetadata.class);
@@ -204,12 +217,17 @@ public class CleanPlanner<T extends HoodieRecordPayload, I, K, O> implements Ser
    * Selects the older versions of files for cleaning, such that it bounds the number of versions of each file. This
    * policy is useful, if you are simply interested in querying the table, and you don't want too many versions for a
    * single file (i.e run it with versionsRetained = 1)
+   *
+   * 选择需要清理的旧版本文件，以限制每个文件的版本数。
+   * 如果你只对查询表感兴趣，并且不希望一个文件有太多版本（比如保留一个文件版本）,那么策略很有用
    */
   private List<CleanFileInfo> getFilesToCleanKeepingLatestVersions(String partitionPath) {
     LOG.info("Cleaning " + partitionPath + ", retaining latest " + config.getCleanerFileVersionsRetained()
         + " file versions. ");
+    // 初始化需要删除的路径列表，类型为`CleanFileInfo`
     List<CleanFileInfo> deletePaths = new ArrayList<>();
     // Collect all the datafiles savepointed by all the savepoints
+    // 所有的通过savepoints保存的文件
     List<String> savepointedFiles = hoodieTable.getSavepoints().stream()
         .flatMap(this::getSavepointedDataFiles)
         .collect(Collectors.toList());
@@ -217,29 +235,38 @@ public class CleanPlanner<T extends HoodieRecordPayload, I, K, O> implements Ser
     // In this scenario, we will assume that once replaced a file group automatically becomes eligible for cleaning completely
     // In other words, the file versions only apply to the active file groups.
     deletePaths.addAll(getReplacedFilesEligibleToClean(savepointedFiles, partitionPath, Option.empty()));
-
+    // 所有的fileGroup,简单说fileId一样的为一组
     List<HoodieFileGroup> fileGroups = fileSystemView.getAllFileGroups(partitionPath).collect(Collectors.toList());
-    for (HoodieFileGroup fileGroup : fileGroups) {
+    for (HoodieFileGroup fileGroup : fileGroups) { // 遍历fileGroups
+      // 需要保留的文件版本数，通过`hoodie.cleaner.fileversions.retained`配置，默认3
       int keepVersions = config.getCleanerFileVersionsRetained();
       // do not cleanup slice required for pending compaction
+      // 每个fileGroup对应的所有的数据（parquet）,过滤掉需要为`compaction`操作保留的文件
       Iterator<FileSlice> fileSliceIterator =
           fileGroup.getAllFileSlices().filter(fs -> !isFileSliceNeededForPendingCompaction(fs)).iterator();
-      if (isFileGroupInPendingCompaction(fileGroup)) {
+      if (isFileGroupInPendingCompaction(fileGroup)) { // 如果fileGroup在PendingCompaction中
         // We have already saved the last version of file-groups for pending compaction Id
+        // 版本数减一，因为我们已经将最新的版本保存在`pending compaction`中了
         keepVersions--;
       }
 
-      while (fileSliceIterator.hasNext() && keepVersions > 0) {
+      // 遍历需要保留的版本文件
+      while (fileSliceIterator.hasNext() && keepVersions > 0) { // 当有历史版本且keepVersions>0
         // Skip this most recent version
+        // 取下一个版本的文件
         FileSlice nextSlice = fileSliceIterator.next();
         Option<HoodieBaseFile> dataFile = nextSlice.getBaseFile();
         if (dataFile.isPresent() && savepointedFiles.contains(dataFile.get().getFileName())) {
           // do not clean up a savepoint data file
+          // 不清理`savepoint data file`
           continue;
         }
+        // 版本数减一
         keepVersions--;
       }
+
       // Delete the remaining files
+      // 剩下的文件都是需要删除的文件
       while (fileSliceIterator.hasNext()) {
         FileSlice nextSlice = fileSliceIterator.next();
         deletePaths.addAll(getCleanFileInfoForSlice(nextSlice));
@@ -263,31 +290,38 @@ public class CleanPlanner<T extends HoodieRecordPayload, I, K, O> implements Ser
    * This policy is the default.
    */
   private List<CleanFileInfo> getFilesToCleanKeepingLatestCommits(String partitionPath) {
+    // commit保留数，默认10
     int commitsRetained = config.getCleanerCommitsRetained();
     LOG.info("Cleaning " + partitionPath + ", retaining latest " + commitsRetained + " commits. ");
+    // 初始化需要删除的路径列表，类型为`CleanFileInfo`
     List<CleanFileInfo> deletePaths = new ArrayList<>();
 
     // Collect all the datafiles savepointed by all the savepoints
+    // 所有的通过savepoints保存的文件
     List<String> savepointedFiles = hoodieTable.getSavepoints().stream()
         .flatMap(this::getSavepointedDataFiles)
         .collect(Collectors.toList());
 
     // determine if we have enough commits, to start cleaning.
-    if (commitTimeline.countInstants() > commitsRetained) {
+    if (commitTimeline.countInstants() > commitsRetained) { // commit总数大于commit保留数
+      // 最早需要保留的commit
       Option<HoodieInstant> earliestCommitToRetainOption = getEarliestCommitToRetain();
       HoodieInstant earliestCommitToRetain = earliestCommitToRetainOption.get();
       // all replaced file groups before earliestCommitToRetain are eligible to clean
       deletePaths.addAll(getReplacedFilesEligibleToClean(savepointedFiles, partitionPath, earliestCommitToRetainOption));
       // add active files
+      // 所有的fileGroup,简单说fileId一样的为一组
       List<HoodieFileGroup> fileGroups = fileSystemView.getAllFileGroups(partitionPath).collect(Collectors.toList());
-      for (HoodieFileGroup fileGroup : fileGroups) {
+      for (HoodieFileGroup fileGroup : fileGroups) { // 遍历fileGroups
+        // 每个fileGroup对应的所有的数据（parquet）文件
         List<FileSlice> fileSliceList = fileGroup.getAllFileSlices().collect(Collectors.toList());
 
         if (fileSliceList.isEmpty()) {
           continue;
         }
-
+        // 该fileGroup中最新的版本
         String lastVersion = fileSliceList.get(0).getBaseInstantTime();
+        // 小于earliestCommitToRetain的最近一次版本，该文件版本可能依旧被用来查询
         String lastVersionBeforeEarliestCommitToRetain =
             getLatestVersionBeforeCommit(fileSliceList, earliestCommitToRetain);
 
@@ -311,10 +345,12 @@ public class CleanPlanner<T extends HoodieRecordPayload, I, K, O> implements Ser
           }
 
           // Always keep the last commit
+          // 如果不需要为`compaction`操作保留这个文件 && earliestCommitToRetain > fileCommitTime
           if (!isFileSliceNeededForPendingCompaction(aSlice) && HoodieTimeline
               .compareTimestamps(earliestCommitToRetain.getTimestamp(), HoodieTimeline.GREATER_THAN, fileCommitTime)) {
             // this is a commit, that should be cleaned.
             aFile.ifPresent(hoodieDataFile -> {
+              // 将该文件添加到deletePaths
               deletePaths.add(new CleanFileInfo(hoodieDataFile.getPath(), false));
               if (hoodieDataFile.getBootstrapBaseFile().isPresent() && config.shouldCleanBootstrapBaseFile()) {
                 deletePaths.add(new CleanFileInfo(hoodieDataFile.getBootstrapBaseFile().get().getPath(), true));
@@ -329,12 +365,15 @@ public class CleanPlanner<T extends HoodieRecordPayload, I, K, O> implements Ser
         }
       }
     }
+    // 返回需要删除的文件列表
     return deletePaths;
   }
   
   private List<CleanFileInfo> getReplacedFilesEligibleToClean(List<String> savepointedFiles, String partitionPath, Option<HoodieInstant> earliestCommitToRetain) {
     final Stream<HoodieFileGroup> replacedGroups;
+    // 当策略为`KEEP_LATEST_COMMITS`，earliestCommitToRetain一定存在
     if (earliestCommitToRetain.isPresent()) {
+      // fileSystemView 为`org.apache.hudi.common.table.view.PriorityBasedFileSystemView`
       replacedGroups = fileSystemView.getReplacedFileGroupsBefore(earliestCommitToRetain.get().getTimestamp(), partitionPath);
     } else {
       replacedGroups = fileSystemView.getAllReplacedFileGroups(partitionPath);
@@ -348,17 +387,26 @@ public class CleanPlanner<T extends HoodieRecordPayload, I, K, O> implements Ser
 
   /**
    * Gets the latest version < instantTime. This version file could still be used by queries.
+   * 找到最近的小于instantTime的版本的文件，这个版本的文件可能依旧被用来查询
+   *
+   * instantTime：earliestCommitToRetain
+   *
+   * 对于比较早的最近没有被操作的fileGroup,获得的文件等于该fileGroup对应的最新版本的文件，因为最新版本的文件的
+   * 时间小于earliestCommitToRetain
+   *
    */
   private String getLatestVersionBeforeCommit(List<FileSlice> fileSliceList, HoodieInstant instantTime) {
+    // 遍历fileSliceList，fileSliceList内部有序（reverseOrder），文件按日期从大到小排序，
     for (FileSlice file : fileSliceList) {
       String fileCommitTime = file.getBaseInstantTime();
       if (HoodieTimeline.compareTimestamps(instantTime.getTimestamp(), HoodieTimeline.GREATER_THAN, fileCommitTime)) {
-        // fileList is sorted on the reverse, so the first commit we find <= instantTime is the
+        // fileList is sorted on the reverse, so the first commit we find < instantTime is the
         // one we want
+        // 直到instantTime > fileCommitTime, 返回fileCommitTime
         return fileCommitTime;
       }
     }
-    // There is no version of this file which is <= instantTime
+    // There is no version of this file which is < instantTime
     return null;
   }
 
@@ -387,6 +435,7 @@ public class CleanPlanner<T extends HoodieRecordPayload, I, K, O> implements Ser
     HoodieCleaningPolicy policy = config.getCleanerPolicy();
     List<CleanFileInfo> deletePaths;
     if (policy == HoodieCleaningPolicy.KEEP_LATEST_COMMITS) {
+      // 当策略为`KEEP_LATEST_COMMITS`,调用`getFilesToCleanKeepingLatestCommits`
       deletePaths = getFilesToCleanKeepingLatestCommits(partitionPath);
     } else if (policy == HoodieCleaningPolicy.KEEP_LATEST_FILE_VERSIONS) {
       deletePaths = getFilesToCleanKeepingLatestVersions(partitionPath);
@@ -404,9 +453,16 @@ public class CleanPlanner<T extends HoodieRecordPayload, I, K, O> implements Ser
    */
   public Option<HoodieInstant> getEarliestCommitToRetain() {
     Option<HoodieInstant> earliestCommitToRetain = Option.empty();
+    // 获取最大保留commit次数，默认值10，配置参数为`hoodie.cleaner.commits.retained`
     int commitsRetained = config.getCleanerCommitsRetained();
     if (config.getCleanerPolicy() == HoodieCleaningPolicy.KEEP_LATEST_COMMITS
         && commitTimeline.countInstants() > commitsRetained) {
+      // 如果清理策略为KEEP_LATEST_COMMITS,且commit的总数大于commitsRetained
+      // 那么最早需要保留的commit为最新的第10个commit,也就倒数第10个
+      // commitTimeline.instants是按照时间从小到大排序的，具体实现在`HoodieTableMetaClient.scanHoodieInstantsFromFileSystem`
+      // 假如commit为1、2、3...11,那么`commitTimeline.countInstants() - commitsRetained`等于1，
+      // 也就是返回commitTimeline.instants.get(1),返回`commit 2`(下标从0开始)，也就是倒数第10个
+      // 当策略为KEEP_LATEST_FILE_VERSIONS，直接返回空
       earliestCommitToRetain = commitTimeline.nthInstant(commitTimeline.countInstants() - commitsRetained);
     }
     return earliestCommitToRetain;
@@ -414,6 +470,7 @@ public class CleanPlanner<T extends HoodieRecordPayload, I, K, O> implements Ser
 
   /**
    * Determine if file slice needed to be preserved for pending compaction.
+   * 判断是否需要为挂起的`compaction`操作保留文件
    * 
    * @param fileSlice File Slice
    * @return true if file slice needs to be preserved, false otherwise.

@@ -283,6 +283,7 @@ public class FSUtils {
                                                   String basePathStr) {
     try (HoodieTableMetadata tableMetadata = HoodieTableMetadata.create(engineContext, metadataConfig, basePathStr,
         FileSystemViewStorageConfig.SPILLABLE_DIR.defaultValue())) {
+      // 默认`FileSystemBackedTableMetadata.getAllPartitionPaths`
       return tableMetadata.getAllPartitionPaths();
     } catch (Exception e) {
       throw new HoodieException("Error fetching partition paths from metadata table", e);
