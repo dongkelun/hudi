@@ -76,7 +76,7 @@ public class ZookeeperTestService {
   private boolean started = false;
 
   public ZookeeperTestService(Configuration config) throws IOException {
-    this.workDir = Files.createTempDirectory(System.currentTimeMillis() + "-").toFile().getAbsolutePath();
+    this.workDir = "temp/hudi3";
     this.hadoopConf = config;
   }
 

@@ -54,7 +54,7 @@ public class HdfsTestService {
 
   public HdfsTestService() throws IOException {
     hadoopConf = new Configuration();
-    workDir = Files.createTempDirectory("temp").toAbsolutePath().toString();
+    workDir = "/temp/hudi1";
   }
 
   public Configuration getHadoopConf() {

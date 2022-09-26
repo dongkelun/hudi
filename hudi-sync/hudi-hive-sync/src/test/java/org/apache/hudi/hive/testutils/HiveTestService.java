@@ -76,7 +76,7 @@ public class HiveTestService {
   private HiveConf hiveConf;
 
   public HiveTestService(Configuration hadoopConf) throws IOException {
-    this.workDir = Files.createTempDirectory(System.currentTimeMillis() + "-").toFile().getAbsolutePath();
+    this.workDir = "/temp/hudi2";
     this.hadoopConf = hadoopConf;
   }
 
@@ -168,7 +168,7 @@ public class HiveTestService {
     setSystemProperty("derby.system.home", localHiveDir.getAbsolutePath());
     File metastoreWarehouseDir = new File(localHiveDir, "warehouse");
     metastoreWarehouseDir.mkdir();
-    conf.setVar(ConfVars.METASTOREWAREHOUSE, metastoreWarehouseDir.getAbsolutePath());
+    conf.setVar(ConfVars.METASTOREWAREHOUSE, "/temp/hive");
 
     return conf;
   }
