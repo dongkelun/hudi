@@ -132,11 +132,15 @@ public abstract class BaseCleanActionExecutor<T extends HoodieRecordPayload, I, 
         .filterInflightsAndRequested().getInstants().collect(Collectors.toList());
     if (pendingCleanInstants.size() > 0) {
       pendingCleanInstants.forEach(hoodieInstant -> {
-        LOG.info("Finishing previously unfinished cleaner instant=" + hoodieInstant);
-        try {
-          cleanMetadataList.add(runPendingClean(table, hoodieInstant));
-        } catch (Exception e) {
-          LOG.warn("Failed to perform previous clean operation, instant: " + hoodieInstant, e);
+        if (table.getCleanTimeline().isEmpty(hoodieInstant)) {
+          table.getActiveTimeline().deleteEmptyInstantIfExists(hoodieInstant);
+        } else {
+          LOG.info("Finishing previously unfinished cleaner instant=" + hoodieInstant);
+          try {
+            cleanMetadataList.add(runPendingClean(table, hoodieInstant));
+          } catch (Exception e) {
+            LOG.warn("Failed to perform previous clean operation, instant: " + hoodieInstant, e);
+          }
         }
       });
       table.getMetaClient().reloadActiveTimeline();

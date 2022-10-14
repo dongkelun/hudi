@@ -723,6 +723,58 @@ public class TestCleaner extends HoodieClientTestBase {
     assertTrue(testTable.baseFileExists(p0, "00000000000003", file3P0C2));
   }
 
+  @Test
+  public void testCleanEmptyInstants() throws Exception {
+    HoodieWriteConfig config =
+            HoodieWriteConfig.newBuilder()
+                    .withPath(basePath)
+                    .withMetadataConfig(HoodieMetadataConfig.newBuilder().withAssumeDatePartitioning(true).build())
+                    .withCompactionConfig(HoodieCompactionConfig.newBuilder()
+                            .withCleanerPolicy(HoodieCleaningPolicy.KEEP_LATEST_COMMITS).build())
+                    .build();
+    metaClient = HoodieTableMetaClient.reload(metaClient);
+
+    int commitCount = 20;
+    int cleanCount = 20;
+
+    int startInstant = 1;
+    for (int i = 0; i < commitCount; i++, startInstant++) {
+      String commitTime = makeNewCommitTime(startInstant);
+      HoodieTestTable.of(metaClient).addCommit(commitTime);
+    }
+
+    for (int i = 0; i < cleanCount; i++, startInstant++) {
+      String commitTime = makeNewCommitTime(startInstant);
+      createCleanMetadata(commitTime + "", false, true);
+    }
+
+    List<HoodieCleanStat> cleanStats = runCleaner(config);
+    HoodieActiveTimeline timeline = metaClient.reloadActiveTimeline();
+
+    assertEquals(0, cleanStats.size(), "Must not clean any files");
+    assertEquals(1, timeline.getTimelineOfActions(
+            CollectionUtils.createSet(HoodieTimeline.CLEAN_ACTION)).filterInflightsAndRequested().countInstants());
+    assertEquals(0, timeline.getTimelineOfActions(
+            CollectionUtils.createSet(HoodieTimeline.CLEAN_ACTION)).filterInflights().countInstants());
+    assertEquals(--cleanCount, timeline.getTimelineOfActions(
+            CollectionUtils.createSet(HoodieTimeline.CLEAN_ACTION)).filterCompletedInstants().countInstants());
+    assertTrue(timeline.getTimelineOfActions(
+            CollectionUtils.createSet(HoodieTimeline.CLEAN_ACTION)).filterInflightsAndRequested().containsInstant(makeNewCommitTime(--startInstant)));
+
+    cleanStats = runCleaner(config);
+    timeline = metaClient.reloadActiveTimeline();
+
+    assertEquals(0, cleanStats.size(), "Must not clean any files");
+    assertEquals(1, timeline.getTimelineOfActions(
+            CollectionUtils.createSet(HoodieTimeline.CLEAN_ACTION)).filterInflightsAndRequested().countInstants());
+    assertEquals(0, timeline.getTimelineOfActions(
+            CollectionUtils.createSet(HoodieTimeline.CLEAN_ACTION)).filterInflights().countInstants());
+    assertEquals(--cleanCount, timeline.getTimelineOfActions(
+            CollectionUtils.createSet(HoodieTimeline.CLEAN_ACTION)).filterCompletedInstants().countInstants());
+    assertTrue(timeline.getTimelineOfActions(
+            CollectionUtils.createSet(HoodieTimeline.CLEAN_ACTION)).filterInflightsAndRequested().containsInstant(makeNewCommitTime(--startInstant)));
+  }
+
   /**
    * Test HoodieTable.clean() Cleaning by versions logic for MOR table with Log files.
    */

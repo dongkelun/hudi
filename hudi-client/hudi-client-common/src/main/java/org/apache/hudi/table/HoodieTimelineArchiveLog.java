@@ -301,10 +301,19 @@ public class HoodieTimelineArchiveLog<T extends HoodieAvroPayload, I, K, O> {
       List<IndexedRecord> records = new ArrayList<>();
       for (HoodieInstant hoodieInstant : instants) {
         try {
-          deleteAnyLeftOverMarkers(context, hoodieInstant);
-          records.add(convertToAvroRecord(hoodieInstant));
-          if (records.size() >= this.config.getCommitArchivalBatchSize()) {
-            writeToFile(wrapperSchema, records);
+          if (table.getActiveTimeline().isEmpty(hoodieInstant)
+                  && (
+                  hoodieInstant.getAction().equals(HoodieTimeline.CLEAN_ACTION)
+                          || (hoodieInstant.getAction().equals(HoodieTimeline.ROLLBACK_ACTION) && hoodieInstant.isCompleted())
+              )
+          ) {
+            table.getActiveTimeline().deleteEmptyInstantIfExists(hoodieInstant);
+          } else {
+            deleteAnyLeftOverMarkers(context, hoodieInstant);
+            records.add(convertToAvroRecord(hoodieInstant));
+            if (records.size() >= this.config.getCommitArchivalBatchSize()) {
+              writeToFile(wrapperSchema, records);
+            }
           }
         } catch (Exception e) {
           LOG.error("Failed to archive commits, .commit file: " + hoodieInstant.getFileName(), e);

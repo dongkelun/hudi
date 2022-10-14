@@ -17,19 +17,27 @@
 
 package org.apache.hudi.testutils;
 
+import org.apache.hudi.avro.model.HoodieActionInstant;
+import org.apache.hudi.avro.model.HoodieCleanMetadata;
+import org.apache.hudi.avro.model.HoodieCleanerPlan;
 import org.apache.hudi.client.HoodieReadClient;
 import org.apache.hudi.client.SparkRDDWriteClient;
 import org.apache.hudi.client.SparkTaskContextSupplier;
 import org.apache.hudi.client.common.HoodieSparkEngineContext;
+import org.apache.hudi.common.HoodieCleanStat;
 import org.apache.hudi.common.fs.FSUtils;
+import org.apache.hudi.common.model.HoodieCleaningPolicy;
 import org.apache.hudi.common.model.HoodieRecord;
 import org.apache.hudi.common.model.HoodieRecordLocation;
 import org.apache.hudi.common.model.HoodieTableType;
 import org.apache.hudi.common.table.HoodieTableConfig;
 import org.apache.hudi.common.table.HoodieTableMetaClient;
+import org.apache.hudi.common.table.timeline.HoodieInstant;
 import org.apache.hudi.common.table.timeline.HoodieTimeline;
+import org.apache.hudi.common.table.timeline.versioning.clean.CleanPlanV2MigrationHandler;
 import org.apache.hudi.common.table.view.HoodieTableFileSystemView;
 import org.apache.hudi.common.testutils.HoodieCommonTestHarness;
+import org.apache.hudi.common.testutils.HoodieTestTable;
 import org.apache.hudi.common.testutils.HoodieTestUtils;
 import org.apache.hudi.common.testutils.minicluster.HdfsTestService;
 import org.apache.hudi.common.util.Option;
@@ -58,13 +66,17 @@ import org.junit.jupiter.api.TestInfo;
 
 import java.io.IOException;
 import java.io.Serializable;
+import java.util.Collections;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.Properties;
+import java.util.Random;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 
 import scala.Tuple2;
+
+import static org.apache.hudi.common.util.CleanerUtils.convertCleanMetadata;
 
 /**
  * The test harness for resource initialization and cleanup.
@@ -417,5 +429,28 @@ public abstract class HoodieClientTestHarness extends HoodieCommonTestHarness im
       }
     }
     return Pair.of(partitionPathStatMap, globalStat);
+  }
+
+  public HoodieInstant createCleanMetadata(String instantTime, boolean inflightOnly) throws IOException {
+    return createCleanMetadata(instantTime, inflightOnly, false);
+  }
+
+  public HoodieInstant createCleanMetadata(String instantTime, boolean inflightOnly, boolean isEmpty) throws IOException {
+    HoodieCleanerPlan cleanerPlan = new HoodieCleanerPlan(new HoodieActionInstant("", "", ""), "", new HashMap<>(),
+            CleanPlanV2MigrationHandler.VERSION, new HashMap<>());
+    if (inflightOnly) {
+      HoodieTestTable.of(metaClient).addInflightClean(instantTime, cleanerPlan);
+    } else {
+      HoodieCleanStat cleanStats = new HoodieCleanStat(
+              HoodieCleaningPolicy.KEEP_LATEST_FILE_VERSIONS,
+              HoodieTestUtils.DEFAULT_PARTITION_PATHS[new Random().nextInt(HoodieTestUtils.DEFAULT_PARTITION_PATHS.length)],
+              Collections.emptyList(),
+              Collections.emptyList(),
+              Collections.emptyList(),
+              instantTime);
+      HoodieCleanMetadata cleanMetadata = convertCleanMetadata(instantTime, Option.of(0L), Collections.singletonList(cleanStats));
+      HoodieTestTable.of(metaClient).addClean(instantTime, cleanerPlan, cleanMetadata, isEmpty);
+    }
+    return new HoodieInstant(inflightOnly, "clean", instantTime);
   }
 }
