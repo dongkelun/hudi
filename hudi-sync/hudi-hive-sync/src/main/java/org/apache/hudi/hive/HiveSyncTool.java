@@ -95,11 +95,16 @@ public class HiveSyncTool extends AbstractSyncTool {
     if (hoodieHiveClient != null) {
       switch (hoodieHiveClient.getTableType()) {
         case COPY_ON_WRITE:
+          // 快照查询/实时视图等于表名
           this.snapshotTableName = cfg.tableName;
+          // 读优化查询/读优化视图为空
           this.roTableName = Option.empty();
           break;
         case MERGE_ON_READ:
+          // 快照查询/实时视图等于 表名+SUFFIX_SNAPSHOT_TABLE即 tableName_rt
           this.snapshotTableName = cfg.tableName + SUFFIX_SNAPSHOT_TABLE;
+          // 读优化查询/读优化视图 skipROSuffix默认为false 默认情况下 tableName_ro
+          // 当配置skipROSuffix=true时，等于表名
           this.roTableName = cfg.skipROSuffix ? Option.of(cfg.tableName) :
               Option.of(cfg.tableName + SUFFIX_READ_OPTIMIZED_TABLE);
           break;
@@ -128,12 +133,15 @@ public class HiveSyncTool extends AbstractSyncTool {
   protected void doSync() {
     switch (hoodieHiveClient.getTableType()) {
       case COPY_ON_WRITE:
+        // COW表只有snapshotTableName，也就是实时视图，查询时是由`HoodieParquetInputFormat`实现
         syncHoodieTable(snapshotTableName, false, false);
         break;
       case MERGE_ON_READ:
         // sync a RO table for MOR
+        // MOR 表的读优化视图，以`_RO`结尾,`READ_OPTIMIZED`的缩写，查询时由`HoodieParquetInputFormat`实现
         syncHoodieTable(roTableName.get(), false, true);
         // sync a RT table for MOR
+        // MOR 表的实时视图，以`_RT`结尾，`REAL_TIME`的缩写，查询时由`HoodieParquetRealtimeInputFormat`实现
         syncHoodieTable(snapshotTableName, true, false);
         break;
       default:
@@ -209,16 +217,17 @@ public class HiveSyncTool extends AbstractSyncTool {
     // Append spark table properties & serde properties
     Map<String, String> tableProperties = ConfigUtils.toMap(cfg.tableProperties);
     Map<String, String> serdeProperties = ConfigUtils.toMap(cfg.serdeProperties);
-    if (cfg.syncAsSparkDataSourceTable) {
+    if (cfg.syncAsSparkDataSourceTable) { // SparkSQL读取相关的配置参数
       Map<String, String> sparkTableProperties = getSparkTableProperties(cfg.sparkSchemaLengthThreshold, schema);
       Map<String, String> sparkSerdeProperties = getSparkSerdeProperties(readAsOptimized);
       tableProperties.putAll(sparkTableProperties);
       serdeProperties.putAll(sparkSerdeProperties);
     }
     // Check and sync schema
-    if (!tableExists) {
+    if (!tableExists) { // 如果表不存在，则创建表
       LOG.info("Hive table " + tableName + " is not found. Creating it");
       HoodieFileFormat baseFileFormat = HoodieFileFormat.valueOf(cfg.baseFileFormat.toUpperCase());
+      // org.apache.hudi.hadoop.HoodieParquetInputFormat
       String inputFormatClassName = HoodieInputFormatUtils.getInputFormatClassName(baseFileFormat, useRealTimeInputFormat);
 
       if (baseFileFormat.equals(HoodieFileFormat.PARQUET) && cfg.usePreApacheInputFormat) {
@@ -227,8 +236,9 @@ public class HiveSyncTool extends AbstractSyncTool {
             ? com.uber.hoodie.hadoop.realtime.HoodieRealtimeInputFormat.class.getName()
             : com.uber.hoodie.hadoop.HoodieInputFormat.class.getName();
       }
-
+      // org.apache.hadoop.hive.ql.io.parquet.MapredParquetOutputFormat
       String outputFormatClassName = HoodieInputFormatUtils.getOutputFormatClassName(baseFileFormat);
+      // org.apache.hadoop.hive.ql.io.parquet.serde.ParquetHiveSerDe
       String serDeFormatClassName = HoodieInputFormatUtils.getSerDeClassName(baseFileFormat);
 
       // Custom serde will not work with ALTER TABLE REPLACE COLUMNS
@@ -236,8 +246,8 @@ public class HiveSyncTool extends AbstractSyncTool {
       // /ql/exec/DDLTask.java#L3488
       hoodieHiveClient.createTable(tableName, schema, inputFormatClassName,
           outputFormatClassName, serDeFormatClassName, serdeProperties, tableProperties);
-    } else {
-      // Check if the table schema has evolved
+    } else { // 如果表存在
+      // Check if the table schema has evolved 检查表结构是否已演变
       Map<String, String> tableSchema = hoodieHiveClient.getTableSchema(tableName);
       SchemaDifference schemaDiff = HiveSchemaUtil.getSchemaDifference(schema, tableSchema, cfg.partitionFields, cfg.supportTimestamp);
       if (!schemaDiff.isEmpty()) {

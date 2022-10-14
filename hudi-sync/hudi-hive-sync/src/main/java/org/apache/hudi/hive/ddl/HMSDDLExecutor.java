@@ -90,6 +90,7 @@ public class HMSDDLExecutor implements DDLExecutor {
   public void createTable(String tableName, MessageType storageSchema, String inputFormatClass, String outputFormatClass, String serdeClass, Map<String, String> serdeProperties,
                           Map<String, String> tableProperties) {
     try {
+      // 将从parquet文件中获取的Schema转为map: _hoodie_commit_time -> string
       LinkedHashMap<String, String> mapSchema = HiveSchemaUtil.parquetSchemaToMapSchema(storageSchema, syncConfig.supportTimestamp, false);
 
       List<FieldSchema> fieldSchema = HiveSchemaUtil.convertMapSchemaToHiveFieldSchema(mapSchema, syncConfig);
@@ -112,7 +113,7 @@ public class HMSDDLExecutor implements DDLExecutor {
       newTb.setSd(storageDescriptor);
       newTb.setPartitionKeys(partitionSchema);
 
-      if (!syncConfig.createManagedTable) {
+      if (!syncConfig.createManagedTable) { // 是否为外部表
         newTb.putToParameters("EXTERNAL", "TRUE");
       }
 
@@ -120,6 +121,7 @@ public class HMSDDLExecutor implements DDLExecutor {
         newTb.putToParameters(entry.getKey(), entry.getValue());
       }
       newTb.setTableType(TableType.EXTERNAL_TABLE.toString());
+      // 这里调用的`HiveMetaStoreClient.createTable`
       client.createTable(newTb);
     } catch (Exception e) {
       LOG.error("failed to create table " + tableName, e);
