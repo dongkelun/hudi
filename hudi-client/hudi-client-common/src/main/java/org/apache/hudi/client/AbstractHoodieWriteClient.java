@@ -397,6 +397,7 @@ public abstract class AbstractHoodieWriteClient<T extends HoodieRecordPayload, I
    */
   protected void preWrite(String instantTime, WriteOperationType writeOperationType,
       HoodieTableMetaClient metaClient) {
+    // 设置操作类型
     setOperationType(writeOperationType);
     this.lastCompletedTxnAndMetadata = TransactionUtils.getLastCompletedTxnInstantAndMetadata(metaClient);
     this.txnManager.beginTransaction(Option.of(new HoodieInstant(State.INFLIGHT, metaClient.getCommitActionType(), instantTime)), lastCompletedTxnAndMetadata
@@ -684,9 +685,12 @@ public abstract class AbstractHoodieWriteClient<T extends HoodieRecordPayload, I
    * Provides a new commit time for a write operation (insert/update/delete).
    */
   public String startCommit() {
+    // 首先调用rollbackFailedWrites执行rollback操作
     CleanerUtils.rollbackFailedWrites(config.getFailedWritesCleanPolicy(),
         HoodieTimeline.COMMIT_ACTION, () -> rollbackFailedWrites());
+    // 生成新的instantTime
     String instantTime = HoodieActiveTimeline.createNewInstantTime();
+    // 创建metaClient
     HoodieTableMetaClient metaClient = createMetaClient(true);
     startCommit(instantTime, metaClient.getCommitActionType(), metaClient);
     return instantTime;
@@ -729,6 +733,7 @@ public abstract class AbstractHoodieWriteClient<T extends HoodieRecordPayload, I
     if (config.getFailedWritesCleanPolicy().isLazy()) {
       this.heartbeatClient.start(instantTime);
     }
+    // 创建.commit.request
     metaClient.getActiveTimeline().createNewInstant(new HoodieInstant(HoodieInstant.State.REQUESTED, actionType,
         instantTime));
   }

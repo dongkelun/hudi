@@ -118,14 +118,19 @@ public class HoodieJavaWriteClient<T extends HoodieRecordPayload> extends
 
   @Override
   public List<WriteStatus> insert(List<HoodieRecord<T>> records, String instantTime) {
+    // 首先获取table，这里的table为HoodieJavaCopyOnWriteTable
     HoodieTable<T, List<HoodieRecord<T>>, List<HoodieKey>, List<WriteStatus>> table =
         getTableAndInitCtx(WriteOperationType.INSERT, instantTime);
+    // 验证schema
     table.validateUpsertSchema();
+    // 写之前的一些步骤，比如设置操作类型
     preWrite(instantTime, WriteOperationType.INSERT, table.getMetaClient());
+    // 调用table.insert执行写数据操作，返回result
     HoodieWriteMetadata<List<WriteStatus>> result = table.insert(context, instantTime, records);
     if (result.getIndexLookupDuration().isPresent()) {
       metrics.updateIndexMetrics(LOOKUP_STR, result.getIndexLookupDuration().get().toMillis());
     }
+    // 调用postWrite执行archive、clean等操作返回WriteStatuses
     return postWrite(result, instantTime, table);
   }
 
@@ -171,19 +176,26 @@ public class HoodieJavaWriteClient<T extends HoodieRecordPayload> extends
   }
 
   @Override
+  /**
+   * 判断是否已经commit生成了.commit文件，如果是的话，则执行archive、clean
+   */
   protected List<WriteStatus> postWrite(HoodieWriteMetadata<List<WriteStatus>> result,
                                         String instantTime,
                                         HoodieTable<T, List<HoodieRecord<T>>, List<HoodieKey>, List<WriteStatus>> hoodieTable) {
     if (result.getIndexLookupDuration().isPresent()) {
       metrics.updateIndexMetrics(getOperationType().name(), result.getIndexUpdateDuration().get().toMillis());
     }
+    // commit是否已经提交，这里主要考虑是否设置了自动提交，hoodie.auto.commit默认true
+    // 如果不是自动提交的话，那么我们需要手动执行clean等操作，然后手动commit
+    // 所以这里默认为true
+    // isCommitted代表着已经生成了.commit文件，也就是写操作成功了，也就是通过table.insert已经完成了整个的写操作
     if (result.isCommitted()) {
       // Perform post commit operations.
       if (result.getFinalizeDuration().isPresent()) {
         metrics.updateFinalizeWriteMetrics(result.getFinalizeDuration().get().toMillis(),
             result.getWriteStats().get().size());
       }
-
+      // postCommit主要是执行archive、clean等操作。也就是archive、clean等操作是在写操作完成，生成.commit文件之后进行的。
       postCommit(hoodieTable, result.getCommitMetadata().get(), instantTime, Option.empty());
 
       emitCommitMetrics(instantTime, result.getCommitMetadata().get(), hoodieTable.getMetaClient().getCommitActionType());

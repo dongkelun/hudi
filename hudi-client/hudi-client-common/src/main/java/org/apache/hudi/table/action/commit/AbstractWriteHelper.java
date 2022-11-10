@@ -41,17 +41,22 @@ public abstract class AbstractWriteHelper<T extends HoodieRecordPayload, I, K, O
                                       boolean performTagging) {
     try {
       // De-dupe/merge if needed
+      // 如果开启了去重，则先去重，insert默认不去重
+      // 配置项hoodie.combine.before.insert
       I dedupedRecords =
           combineOnCondition(shouldCombine, inputRecords, shuffleParallelism, table);
 
       Instant lookupBegin = Instant.now();
       I taggedRecords = dedupedRecords;
-      if (performTagging) {
+      if (performTagging) { // 是否需要tag,insert为false
         // perform index loop up to get existing location of records
+        // tag的作用主要是利用文件中保存的索引信息（默认布隆索引），判断records中的数据哪些是新增数据，哪些是更新数据
+        // 对于更新的数据，还要添加上对应的文件位置信息，方便后面更新时查找对应的parquet文件
         taggedRecords = tag(dedupedRecords, context, table);
       }
       Duration indexLookupDuration = Duration.between(lookupBegin, Instant.now());
 
+      // 通过调用executor.execute执行写操作，返回result。这里的executor为JavaInsertCommitActionExecutor
       HoodieWriteMetadata<O> result = executor.execute(taggedRecords);
       result.setIndexLookupDuration(indexLookupDuration);
       return result;

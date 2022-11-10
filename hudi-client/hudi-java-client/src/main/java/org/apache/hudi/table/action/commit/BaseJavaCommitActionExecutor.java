@@ -90,10 +90,18 @@ public abstract class BaseJavaCommitActionExecutor<T extends HoodieRecordPayload
     HoodieWriteMetadata<List<WriteStatus>> result = new HoodieWriteMetadata<>();
 
     WorkloadProfile profile = null;
-    if (isWorkloadProfileNeeded()) {
+    if (isWorkloadProfileNeeded()) { // 始终为true
+      // 构建WorkloadProfile，构建WorkloadProfile的目的主要是为给getPartitioner使用
+      // WorkloadProfile包含了分区路径对应的insert/upsert数量以及upsert数据对应的文件位置信息
+      // 数量信息是为了分桶，或者说是为了分几个文件，这里涉及了小文件合并、文件大小等原理
+      // 位置信息是为了获取要更新的文件
+      // 对于upsert数据，我们复用原来的fileId
+      // 对于insert数据，我们生成新的fileId,如果record数比较多，则分多个文件写
       profile = new WorkloadProfile(buildProfile(inputRecords));
       LOG.info("Workload profile :" + profile);
       try {
+        // 将WorkloadProfile元数据信息持久化到.inflight文件中，.commit.request->.commit.inflight.
+        // 这一步主要是为了mor表的rollback,rollback时可以从.inflight文件中读取对应的元数据信息
         saveWorkloadProfileMetadataToInflight(profile, instantTime);
       } catch (Exception e) {
         HoodieTableMetaClient metaClient = table.getMetaClient();
@@ -109,11 +117,17 @@ public abstract class BaseJavaCommitActionExecutor<T extends HoodieRecordPayload
       }
     }
 
+
+    // 根据WorkloadProfile获取partitioner
     final Partitioner partitioner = getPartitioner(profile);
+    // <桶号,对应的HoodieRecord>，一个桶对应一个文件 fileId
     Map<Integer, List<HoodieRecord<T>>> partitionedRecords = partition(inputRecords, partitioner);
 
     List<WriteStatus> writeStatuses = new LinkedList<>();
+    // forEach，每个桶执行一次写操作handleInsertPartition/handleUpsertPartition
+    // 最终通过BoundedInMemoryExecutor.execute 生产者消费者模式写数据
     partitionedRecords.forEach((partition, records) -> {
+      // 是否更新、删除
       if (WriteOperationType.isChangingRecords(operationType)) {
         handleUpsertPartition(instantTime, partition, records.iterator(), partitioner).forEachRemaining(writeStatuses::addAll);
       } else {
@@ -121,6 +135,7 @@ public abstract class BaseJavaCommitActionExecutor<T extends HoodieRecordPayload
       }
     });
     updateIndex(writeStatuses, result);
+    // commit生成.commit文件，.commit文件的生成标记着写数据的完成
     updateIndexAndCommitIfNeeded(writeStatuses, result);
     return result;
   }
@@ -206,6 +221,7 @@ public abstract class BaseJavaCommitActionExecutor<T extends HoodieRecordPayload
       HoodieCommitMetadata metadata = CommitUtils.buildMetadata(writeStats, result.getPartitionToReplaceFileIds(),
           extraMetadata, operationType, getSchemaToStoreInCommit(), getCommitActionType());
 
+      // 通过activeTimeline.saveAsComplete生成.commit文件
       activeTimeline.saveAsComplete(new HoodieInstant(true, getCommitActionType(), instantTime),
           Option.of(metadata.toJsonString().getBytes(StandardCharsets.UTF_8)));
       LOG.info("Committed " + instantTime);

@@ -138,6 +138,7 @@ public abstract class BaseCommitActionExecutor<T extends HoodieRecordPayload, I,
   protected void commitOnAutoCommit(HoodieWriteMetadata result) {
     // validate commit action before committing result
     runPrecommitValidators(result);
+    // hoodie.auto.commit 是否自动提交commit，默认true
     if (config.shouldAutoCommit()) {
       LOG.info("Auto commit enabled: Committing " + instantTime);
       autoCommit(extraMetadata, result);
