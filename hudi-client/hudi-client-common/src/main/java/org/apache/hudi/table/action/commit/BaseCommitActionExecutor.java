@@ -90,28 +90,43 @@ public abstract class BaseCommitActionExecutor<T extends HoodieRecordPayload, I,
       throws HoodieCommitException {
     try {
       HoodieCommitMetadata metadata = new HoodieCommitMetadata();
+      // 按照分区路径遍历
       profile.getPartitionPaths().forEach(path -> {
+        // 获取对应分区的WorkloadStat
         WorkloadStat partitionStat = profile.getWorkloadStat(path);
+        // 创建一个新的HoodieWriteStat，先进行insert
         HoodieWriteStat insertStat = new HoodieWriteStat();
+        // 将WorkloadStat中的numInserts赋值给insertStat
         insertStat.setNumInserts(partitionStat.getNumInserts());
+        // insertStat的fileId为空
         insertStat.setFileId("");
+        // prevCommit为null
         insertStat.setPrevCommit(HoodieWriteStat.NULL_COMMIT);
+        // 将path和insertStat添加到metadata中
         metadata.addWriteStat(path, insertStat);
 
+        // 接着进行update的逻辑
         partitionStat.getUpdateLocationToCount().forEach((key, value) -> {
+          // 创建一个新的HoodieWriteStat
           HoodieWriteStat writeStat = new HoodieWriteStat();
+          // 设置fileId
           writeStat.setFileId(key);
           // TODO : Write baseCommitTime is possible here ?
+          // prevCommit设为WorkloadStat中的instantTime
           writeStat.setPrevCommit(value.getKey());
+          // 设置更新数
           writeStat.setNumUpdateWrites(value.getValue());
+          // 将path和writeStat添加到metadata中
           metadata.addWriteStat(path, writeStat);
         });
       });
+      // 设置操作类型
       metadata.setOperationType(operationType);
 
       HoodieActiveTimeline activeTimeline = table.getActiveTimeline();
       String commitActionType = getCommitActionType();
       HoodieInstant requested = new HoodieInstant(State.REQUESTED, commitActionType, instantTime);
+      // 将.request转为.inflight，其实就是创建一个新的.inflight,将metadata转成json持久化到.inflight
       activeTimeline.transitionRequestedToInflight(requested,
           Option.of(metadata.toJsonString().getBytes(StandardCharsets.UTF_8)),
           config.shouldAllowMultiWriteOnSameInstant());

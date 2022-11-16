@@ -33,24 +33,40 @@ public class WorkloadStat implements Serializable {
 
   private long numUpdates = 0L;
 
+  // fileId,(instantTime,记录数)
   private HashMap<String, Pair<String, Long>> updateLocationToCount;
 
   public WorkloadStat() {
     updateLocationToCount = new HashMap<>();
   }
 
+  /**
+   * numInserts数初始值0，addInserts将numInserts加上对应的记录数
+   */
   public long addInserts(long numInserts) {
     return this.numInserts += numInserts;
   }
 
+  /**
+   *  accNumUpdates初始值0
+   * 如果updateLocationToCount中有对应的fileId，
+   * 则先获取updateLocationToCount对应的fileId对应的记录数赋值给accNumUpdates
+   * 最后将updateLocationToCount
+   */
   public long addUpdates(HoodieRecordLocation location, long numUpdates) {
+    // 初始值0
     long accNumUpdates = 0;
+    // 如果已经存在了对应的fileId
     if (updateLocationToCount.containsKey(location.getFileId())) {
+      // 将updateLocationToCount中对应的数取出来赋值给accNumUpdates
       accNumUpdates = updateLocationToCount.get(location.getFileId()).getRight();
     }
+    // 更新updateLocationToCount中该fileId对应的value。value为pair,将value的left即instantTime更新为location.getInstantTime()
+    // 将value的right即记录数更新为numUpdates + accNumUpdates
     updateLocationToCount.put(
         location.getFileId(),
         Pair.of(location.getInstantTime(), numUpdates + accNumUpdates));
+    // numUpdates初始值为0，每次调用addUpdates都将numUpdates加上对应的record数
     return this.numUpdates += numUpdates;
   }
 

@@ -172,34 +172,53 @@ public abstract class BaseJavaCommitActionExecutor<T extends HoodieRecordPayload
   }
 
   protected Pair<HashMap<String, WorkloadStat>, WorkloadStat> buildProfile(List<HoodieRecord<T>> inputRecords) {
+    // 分区路径，WorkloadStat
     HashMap<String, WorkloadStat> partitionPathStatMap = new HashMap<>();
+    // 全局WorkloadStat
     WorkloadStat globalStat = new WorkloadStat();
 
+    // 返回(分区路径，文件位置信息)，记录数
+    // 也就是partitionLocationCounts：分区路径、文件位置、记录数
     Map<Pair<String, Option<HoodieRecordLocation>>, Long> partitionLocationCounts = inputRecords
         .stream()
         .map(record -> Pair.of(
+            // (分区路径，文件位置信息)，record
             Pair.of(record.getPartitionPath(), Option.ofNullable(record.getCurrentLocation())), record))
+            // 根据分区路径groupBy，统计每个分区对应的数量
         .collect(Collectors.groupingBy(Pair::getLeft, Collectors.counting()));
 
+    // 遍历partitionLocationCounts(k,v)
     for (Map.Entry<Pair<String, Option<HoodieRecordLocation>>, Long> e : partitionLocationCounts.entrySet()) {
+      // 分区路径
       String partitionPath = e.getKey().getLeft();
+      // 记录数
       Long count = e.getValue();
+      // 文件位置HoodieRecordLocation
       Option<HoodieRecordLocation> locOption = e.getKey().getRight();
 
+      // 如果partitionPathStatMap没有该分区，则将该分区放进去，并且初始化value WorkloadStat
       if (!partitionPathStatMap.containsKey(partitionPath)) {
         partitionPathStatMap.put(partitionPath, new WorkloadStat());
       }
 
+      // 如果文件位置信息存在，则代表是update
+      // 获取文件位置信息是在前面的tag方法中，对于insert方法，不需要tag
       if (locOption.isPresent()) {
         // update
+        // 对应分区下的WorkloadStat调用addUpdates
         partitionPathStatMap.get(partitionPath).addUpdates(locOption.get(), count);
+        // 全局WorkloadStat调用addUpdates
         globalStat.addUpdates(locOption.get(), count);
       } else {
+        // 否则是insert
         // insert
+        // 对应分区下的WorkloadStat调用addInserts,使insert数+count
         partitionPathStatMap.get(partitionPath).addInserts(count);
+        // 全局WorkloadStat中的insert数+count
         globalStat.addInserts(count);
       }
     }
+    // 返回分区统计信息和全局统计信息
     return Pair.of(partitionPathStatMap, globalStat);
   }
 
