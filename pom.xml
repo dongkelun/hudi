@@ -20,11 +20,11 @@
 <project xmlns="http://maven.apache.org/POM/4.0.0" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
   <modelVersion>4.0.0</modelVersion>
 
-  <parent>
-    <groupId>org.apache</groupId>
-    <artifactId>apache</artifactId>
-    <version>21</version>
-  </parent>
+<!--  <parent>-->
+<!--    <groupId>org.apache</groupId>-->
+<!--    <artifactId>apache</artifactId>-->
+<!--    <version>21</version>-->
+<!--  </parent>-->
 
   <groupId>org.apache.hudi</groupId>
   <artifactId>hudi</artifactId>
@@ -36,33 +36,33 @@
 
   <modules>
     <module>hudi-common</module>
-    <module>hudi-cli</module>
+<!--    <module>hudi-cli</module>-->
     <module>hudi-client</module>
     <module>hudi-aws</module>
     <module>hudi-gcp</module>
     <module>hudi-hadoop-mr</module>
     <module>hudi-spark-datasource</module>
     <module>hudi-timeline-service</module>
-    <module>hudi-utilities</module>
+<!--    <module>hudi-utilities</module>-->
     <module>hudi-sync</module>
-    <module>packaging/hudi-hadoop-mr-bundle</module>
-    <module>packaging/hudi-datahub-sync-bundle</module>
-    <module>packaging/hudi-hive-sync-bundle</module>
-    <module>packaging/hudi-aws-bundle</module>
-    <module>packaging/hudi-gcp-bundle</module>
-    <module>packaging/hudi-spark-bundle</module>
-    <module>packaging/hudi-presto-bundle</module>
-    <module>packaging/hudi-utilities-bundle</module>
-    <module>packaging/hudi-utilities-slim-bundle</module>
-    <module>packaging/hudi-timeline-server-bundle</module>
-    <module>packaging/hudi-trino-bundle</module>
-    <module>hudi-examples</module>
+<!--    <module>packaging/hudi-hadoop-mr-bundle</module>-->
+<!--    <module>packaging/hudi-datahub-sync-bundle</module>-->
+<!--    <module>packaging/hudi-hive-sync-bundle</module>-->
+<!--    <module>packaging/hudi-aws-bundle</module>-->
+<!--    <module>packaging/hudi-gcp-bundle</module>-->
+<!--    <module>packaging/hudi-spark-bundle</module>-->
+<!--    <module>packaging/hudi-presto-bundle</module>-->
+<!--    <module>packaging/hudi-utilities-bundle</module>-->
+<!--    <module>packaging/hudi-utilities-slim-bundle</module>-->
+<!--    <module>packaging/hudi-timeline-server-bundle</module>-->
+<!--    <module>packaging/hudi-trino-bundle</module>-->
+<!--    <module>hudi-examples</module>-->
     <module>hudi-flink-datasource</module>
     <module>hudi-kafka-connect</module>
     <module>packaging/hudi-flink-bundle</module>
-    <module>packaging/hudi-kafka-connect-bundle</module>
-    <module>packaging/hudi-cli-bundle</module>
-    <module>hudi-tests-common</module>
+<!--    <module>packaging/hudi-kafka-connect-bundle</module>-->
+<!--    <module>packaging/hudi-cli-bundle</module>-->
+<!--    <module>hudi-tests-common</module>-->
   </modules>
 
   <licenses>
@@ -134,7 +134,7 @@
     <spark3.version>3.3.1</spark3.version>
     <sparkbundle.version></sparkbundle.version>
     <flink1.16.version>1.16.0</flink1.16.version>
-    <flink1.15.version>1.15.1</flink1.15.version>
+    <flink1.15.version>1.15.4</flink1.15.version>
     <flink1.14.version>1.14.5</flink1.14.version>
     <flink1.13.version>1.13.6</flink1.13.version>
     <flink.version>${flink1.16.version}</flink.version>
@@ -793,37 +793,31 @@
         <groupId>org.apache.logging.log4j</groupId>
         <artifactId>log4j-api</artifactId>
         <version>${log4j2.version}</version>
-        <scope>provided</scope>
       </dependency>
       <dependency>
         <groupId>org.apache.logging.log4j</groupId>
         <artifactId>log4j-core</artifactId>
         <version>${log4j2.version}</version>
-        <scope>provided</scope>
       </dependency>
       <dependency>
         <groupId>org.apache.logging.log4j</groupId>
         <artifactId>log4j-1.2-api</artifactId>
         <version>${log4j2.version}</version>
-        <scope>provided</scope>
       </dependency>
       <dependency>
         <groupId>org.apache.logging.log4j</groupId>
         <artifactId>log4j-slf4j-impl</artifactId>
         <version>${log4j2.version}</version>
-        <scope>provided</scope>
       </dependency>
       <dependency>
         <groupId>org.slf4j</groupId>
         <artifactId>slf4j-api</artifactId>
         <version>${slf4j.version}</version>
-        <scope>provided</scope>
       </dependency>
       <dependency>
         <groupId>org.slf4j</groupId>
         <artifactId>jul-to-slf4j</artifactId>
         <version>${slf4j.version}</version>
-        <scope>provided</scope>
       </dependency>
 
       <!-- Fasterxml -->
@@ -1117,7 +1111,6 @@
         <groupId>org.apache.hadoop</groupId>
         <artifactId>hadoop-common</artifactId>
         <version>${hadoop.version}</version>
-        <scope>provided</scope>
         <exclusions>
           <exclusion>
             <groupId>jdk.tools</groupId>
@@ -1153,7 +1146,6 @@
         <groupId>org.apache.hadoop</groupId>
         <artifactId>hadoop-auth</artifactId>
         <version>${hadoop.version}</version>
-        <scope>provided</scope>
         <exclusions>
           <exclusion>
             <groupId>org.slf4j</groupId>
