@@ -35,7 +35,7 @@ import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.catalyst.catalog.HoodieCatalogTable
 import org.apache.spark.sql.hive.HiveExternalCatalog
 import org.apache.spark.sql.hudi.HoodieOptionConfig.mapSqlOptionsToDataSourceWriteConfigs
-import org.apache.spark.sql.hudi.HoodieSqlCommonUtils.{isHoodieConfigKey, isUsingHiveCatalog}
+import org.apache.spark.sql.hudi.HoodieSqlCommonUtils.{isExtraMetadataKey, isHoodieConfigKey, isUsingHiveCatalog}
 import org.apache.spark.sql.hudi.ProvidesHoodieConfig.combineOptions
 import org.apache.spark.sql.hudi.command.{SqlKeyGenerator, ValidateDuplicateKeyPayload}
 import org.apache.spark.sql.internal.SQLConf
@@ -352,6 +352,7 @@ object ProvidesHoodieConfig {
       mapSqlOptionsToDataSourceWriteConfigs(catalogTable.catalogProperties) ++
       tableConfig.getProps.asScala.toMap ++
       filterHoodieConfigs(sqlConf.getAllConfs) ++
+      filterExtraMetadataConfigs(sqlConf.getAllConfs) ++
       filterNullValues(overridingOpts)
   }
 
@@ -360,5 +361,8 @@ object ProvidesHoodieConfig {
 
   private def filterHoodieConfigs(opts: Map[String, String]): Map[String, String] =
     opts.filterKeys(isHoodieConfigKey)
+
+  private def filterExtraMetadataConfigs(opts: Map[String, String]): Map[String, String] =
+    opts.filterKeys(isExtraMetadataKey(_, opts(COMMIT_METADATA_KEYPREFIX.key)))
 
 }

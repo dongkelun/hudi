@@ -275,6 +275,8 @@ object HoodieSqlCommonUtils extends SparkAdapterSupport {
   def isHoodieConfigKey(key: String): Boolean =
     key.startsWith("hoodie.") || key == DataSourceReadOptions.TIME_TRAVEL_AS_OF_INSTANT.key
 
+  def isExtraMetadataKey(key: String, prefix: String): Boolean =
+    key.startsWith(prefix)
   /**
    * Checks whether Spark is using Hive as Session's Catalog
    */
