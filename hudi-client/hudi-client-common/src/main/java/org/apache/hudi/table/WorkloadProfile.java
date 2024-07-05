@@ -35,6 +35,7 @@ public class WorkloadProfile implements Serializable {
   /**
    * Computed workload profile.
    */
+  // 分区路径，WorkloadStat
   protected final HashMap<String, WorkloadStat> partitionPathStatMap;
 
   /**

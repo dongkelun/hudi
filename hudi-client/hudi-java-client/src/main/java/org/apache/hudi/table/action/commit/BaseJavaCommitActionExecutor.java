@@ -154,14 +154,17 @@ public abstract class BaseJavaCommitActionExecutor<T extends HoodieRecordPayload
   }
 
   private Partitioner getPartitioner(WorkloadProfile profile) {
+    // 是否有修改操作：UPSERT、UPSERT_PREPPED、DELETE
     if (WriteOperationType.isChangingRecords(operationType)) {
       return getUpsertPartitioner(profile);
     } else {
+      // 这里最终也会调用 getUpsertPartitioner
       return getInsertPartitioner(profile);
     }
   }
 
   private Map<Integer, List<HoodieRecord<T>>> partition(List<HoodieRecord<T>> dedupedRecords, Partitioner partitioner) {
+    // (桶号, ((HoodieKey，HoodieRecordLocation), HoodieRecord))
     Map<Integer, List<Pair<Pair<HoodieKey, Option<HoodieRecordLocation>>, HoodieRecord<T>>>> partitionedMidRecords = dedupedRecords
         .stream()
         .map(record -> Pair.of(Pair.of(record.getKey(), Option.ofNullable(record.getCurrentLocation())), record))
@@ -171,6 +174,16 @@ public abstract class BaseJavaCommitActionExecutor<T extends HoodieRecordPayload
     return results;
   }
 
+  /**
+   * 构建WorkloadProfile，构建WorkloadProfile的目的主要是为给getPartitioner使用
+   * WorkloadProfile包含了分区路径对应的insert/upsert数量以及upsert数据对应的文件位置信息
+   * 数量信息是为了分桶，或者说是为了分几个文件，这里涉及了小文件合并、文件大小等原理
+   * 位置信息是为了获取要更新的文件
+   * 对于upsert数据，我们复用原来的fileId
+   * 对于insert数据，我们生成新的fileId,如果record数比较多，则分多个文件写
+   * 注意：对于insert数据分为两种：1、小文件合并，先将数据写到小文件中，这部分数据复用原来的fileId
+   * 2、如果还有剩余数据没写完，则生成新的fileId
+   */
   protected Pair<HashMap<String, WorkloadStat>, WorkloadStat> buildProfile(List<HoodieRecord<T>> inputRecords) {
     // 分区路径，WorkloadStat
     HashMap<String, WorkloadStat> partitionPathStatMap = new HashMap<>();

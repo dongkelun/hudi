@@ -135,7 +135,9 @@ public class BoundedInMemoryExecutor<I, O, E> {
    */
   public E execute() {
     try {
+      // 启动生产者，这里的生产者可以为多个
       ExecutorCompletionService<Boolean> producerService = startProducers();
+      // 启动消费者，这里的消费者只能有一个
       Future<E> future = startConsumer();
       // Wait for consumer to be done
       return future.get();
