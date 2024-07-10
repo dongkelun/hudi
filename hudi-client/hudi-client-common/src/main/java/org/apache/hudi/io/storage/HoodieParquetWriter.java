@@ -94,6 +94,7 @@ public class HoodieParquetWriter<T extends HoodieRecordPayload, R extends Indexe
   public void writeAvro(String key, IndexedRecord object) throws IOException {
     super.write(object);
     if (populateMetaFields) {
+      // HoodieAvroWriteSupport
       writeSupport.add(key);
     }
   }

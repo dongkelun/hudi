@@ -138,6 +138,7 @@ public class HoodieCreateHandle<T extends HoodieRecordPayload, I, K, O> extends 
         }
         // Convert GenericRecord to GenericRecord with hoodie commit metadata in schema
         IndexedRecord recordWithMetadataInSchema = rewriteRecord((GenericRecord) avroRecord.get());
+        // 对于Java Client 为 False
         if (preserveHoodieMetadata) {
           fileWriter.writeAvro(record.getRecordKey(), recordWithMetadataInSchema);
         } else {
@@ -203,7 +204,7 @@ public class HoodieCreateHandle<T extends HoodieRecordPayload, I, K, O> extends 
   public List<WriteStatus> close() {
     LOG.info("Closing the file " + writeStatus.getFileId() + " as we are done with all the records " + recordsWritten);
     try {
-
+      // HoodieParquetWriter
       fileWriter.close();
 
       setupWriteStatus();

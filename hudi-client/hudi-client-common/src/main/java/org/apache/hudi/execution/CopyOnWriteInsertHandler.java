@@ -109,6 +109,7 @@ public class CopyOnWriteInsertHandler<T extends HoodieRecordPayload>
 
   private void closeOpenHandles() {
     for (HoodieWriteHandle<?,?,?,?> handle : handles.values()) {
+      // HoodieCreateHandle
       statuses.addAll(handle.close());
     }
     handles.clear();

@@ -51,6 +51,10 @@ public abstract class BoundedInMemoryQueueConsumer<I, O> {
   /**
    * Notifies implementation that we have exhausted consuming records from queue.
    */
+  /**
+   * Insert: #{@link org.apache.hudi.execution.CopyOnWriteInsertHandler}
+   * Upsert: #{@link org.apache.hudi.table.action.commit.AbstractMergeHelper.UpdateHandler}
+   */
   protected abstract void finish();
 
   /**

@@ -38,6 +38,7 @@ public class BloomFilterFactory {
     if (bloomFilterTypeCode.equalsIgnoreCase(BloomFilterTypeCode.SIMPLE.name())) {
       return new SimpleBloomFilter(numEntries, errorRate, Hash.MURMUR_HASH);
     } else if (bloomFilterTypeCode.equalsIgnoreCase(BloomFilterTypeCode.DYNAMIC_V0.name())) {
+      // 默认值 BloomFilterTypeCode.DYNAMIC_V0.name
       return new HoodieDynamicBoundedBloomFilter(numEntries, errorRate, Hash.MURMUR_HASH, maxNumberOfEntries);
     } else {
       throw new IllegalArgumentException("Bloom Filter type code not recognizable " + bloomFilterTypeCode);
