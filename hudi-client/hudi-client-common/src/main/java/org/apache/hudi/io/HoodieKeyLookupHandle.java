@@ -72,6 +72,10 @@ public class HoodieKeyLookupHandle<T extends HoodieRecordPayload, I, K, O> exten
 
   /**
    * Given a list of row keys and one file, return only row keys existing in that file.
+   *
+   * 给定一个行键列表和一个文件，只返回该文件中存在的行键。
+   * 这里拿候选的 RecordKeys 去实际的 parquet文件中做一一比对，看是否确实存在于该 parquet文件中
+   * 返回过滤后的实际存在于该 parquet文件中的 RecordKey
    */
   public List<String> checkCandidatesAgainstFile(Configuration configuration, List<String> candidateRecordKeys,
                                                  Path filePath) throws HoodieIndexException {
@@ -80,6 +84,8 @@ public class HoodieKeyLookupHandle<T extends HoodieRecordPayload, I, K, O> exten
       // Load all rowKeys from the file, to double-confirm
       if (!candidateRecordKeys.isEmpty()) {
         HoodieTimer timer = new HoodieTimer().startTimer();
+        // 这里拿候选的 RecordKeys 去实际的 parquet文件中做一一比对，看是否确实存在于该 parquet文件中
+        // 返回过滤后的实际存在于该 parquet文件中的 RecordKey
         Set<String> fileRowKeys = createNewFileReader().filterRowKeys(new HashSet<>(candidateRecordKeys));
         foundRecordKeys.addAll(fileRowKeys);
         LOG.info(String.format("Checked keys against file %s, in %d ms. #candidates (%d) #found (%d)", filePath,
@@ -99,6 +105,7 @@ public class HoodieKeyLookupHandle<T extends HoodieRecordPayload, I, K, O> exten
    */
   public void addKey(String recordKey) {
     // check record key against bloom filter of current file & add to possible keys if needed
+    // 根据当前文件的布隆过滤器检查记录键，并在需要时添加可能的键
     if (bloomFilter.mightContain(recordKey)) {
       if (LOG.isDebugEnabled()) {
         LOG.debug("Record key " + recordKey + " matches bloom filter in  " + partitionPathFilePair);
@@ -110,6 +117,8 @@ public class HoodieKeyLookupHandle<T extends HoodieRecordPayload, I, K, O> exten
 
   /**
    * Of all the keys, that were added, return a list of keys that were actually found in the file group.
+   *
+   * 在所有添加的键中，返回在文件组中实际找到的键的列表。
    */
   public KeyLookupResult getLookupResult() {
     if (LOG.isDebugEnabled()) {
@@ -117,6 +126,7 @@ public class HoodieKeyLookupHandle<T extends HoodieRecordPayload, I, K, O> exten
     }
 
     HoodieBaseFile dataFile = getLatestDataFile();
+    // 调用 checkCandidatesAgainstFile 返回在文件组中实际找到的 RecordKeys。
     List<String> matchingKeys =
         checkCandidatesAgainstFile(hoodieTable.getHadoopConf(), candidateRecordKeys, new Path(dataFile.getPath()));
     LOG.info(

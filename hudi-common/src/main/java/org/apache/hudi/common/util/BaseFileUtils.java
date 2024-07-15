@@ -72,6 +72,7 @@ public abstract class BaseFileUtils {
 
   /**
    * Read the bloom filter from the metadata of the given data file.
+   * 从给定数据文件的元数据中读取布隆过滤器。
    * @param configuration Configuration
    * @param filePath The data file path
    * @return a BloomFilter object
@@ -106,6 +107,7 @@ public abstract class BaseFileUtils {
    * @return A array of two string where the first is min record key and the second is max record key
    */
   public String[] readMinMaxRecordKeys(Configuration configuration, Path filePath) {
+    // 读取 parquet 文件元数据中的 hoodie_min_record_key 、hoodie_max_record_key
     Map<String, String> minMaxKeys = readFooter(configuration, true, filePath,
         HoodieAvroWriteSupport.HOODIE_MIN_RECORD_KEY_FOOTER, HoodieAvroWriteSupport.HOODIE_MAX_RECORD_KEY_FOOTER);
     if (minMaxKeys.size() != 2) {

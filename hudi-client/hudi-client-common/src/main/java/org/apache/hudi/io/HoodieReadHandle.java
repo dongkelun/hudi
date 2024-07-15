@@ -36,6 +36,7 @@ import org.apache.hadoop.fs.Path;
  */
 public abstract class HoodieReadHandle<T extends HoodieRecordPayload, I, K, O> extends HoodieIOHandle<T, I, K, O> {
 
+  // (partitionPath, fileId)
   protected final Pair<String, String> partitionPathFilePair;
 
   public HoodieReadHandle(HoodieWriteConfig config, String instantTime, HoodieTable<T, I, K, O> hoodieTable,

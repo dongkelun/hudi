@@ -71,6 +71,8 @@ public abstract class AbstractWriteHelper<T extends HoodieRecordPayload, I, K, O
   private I tag(
       I dedupedRecords, HoodieEngineContext context, HoodieTable<T, I, K, O> table) {
     // perform index loop up to get existing location of records
+    // 执行索引循环以获取记录的现有位置
+    // 对于 Java Client 这里 table 为 HoodieJavaCopyOnWriteTable
     return table.getIndex().tagLocation(dedupedRecords, context, table);
   }
 

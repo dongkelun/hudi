@@ -24,6 +24,8 @@ import java.util.Set;
 
 /**
  * Look up tree implemented as interval trees to search for any given key in (N logN) time complexity.
+ *
+ * 基于区间树实现的查找树，查询任意给定 Key 的时间复杂度为 (N logN)
  */
 class KeyRangeLookupTree implements Serializable {
 
@@ -121,7 +123,7 @@ class KeyRangeLookupTree implements Serializable {
 
   /**
    * Fetches all the matching index files where the key could possibly be present.
-   *
+   * 获取可能存在 key 的所有匹配索引文件。
    * @param root refers to the current root of the look up tree
    * @param lookupKey the key to be searched for
    */
@@ -129,16 +131,16 @@ class KeyRangeLookupTree implements Serializable {
     if (root == null) {
       return;
     }
-
+    // 如果 key 在该KeyRangeNode 的最大值最小值区间内，则返回该 KeyRangeNode 的 fileNameList
     if (root.getMinRecordKey().compareTo(lookupKey) <= 0 && lookupKey.compareTo(root.getMaxRecordKey()) <= 0) {
       matchingFileNameSet.addAll(root.getFileNameList());
     }
-
+    // 如果 key 在左子树的区间内，查找左子树并返回对应的 fileNameList
     if (root.getLeftSubTreeMax() != null && root.getLeftSubTreeMin().compareTo(lookupKey) <= 0
         && lookupKey.compareTo(root.getLeftSubTreeMax()) <= 0) {
       getMatchingIndexFiles(root.getLeft(), lookupKey, matchingFileNameSet);
     }
-
+    // 如果 key 在右子树的区间内，查找右子树并返回对应的 fileNameList
     if (root.getRightSubTreeMax() != null && root.getRightSubTreeMin().compareTo(lookupKey) <= 0
         && lookupKey.compareTo(root.getRightSubTreeMax()) <= 0) {
       getMatchingIndexFiles(root.getRight(), lookupKey, matchingFileNameSet);

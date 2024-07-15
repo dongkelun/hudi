@@ -49,6 +49,7 @@ public abstract class JavaHoodieIndex<T extends HoodieRecordPayload> extends Hoo
     }
 
     // TODO more indexes to be added
+    // 从这里看出，当前版本（0.9.0），Java Client 只支持两种索引类型：INMEMORY 和 BLOOM
     switch (config.getIndexType()) {
       case INMEMORY:
         return new JavaInMemoryHashIndex(config);

@@ -28,6 +28,7 @@ import java.util.List;
  */
 class KeyRangeNode implements Comparable<KeyRangeNode>, Serializable {
 
+  // List<fileId>
   private final List<String> fileNameList = new ArrayList<>();
   private final String minRecordKey;
   private final String maxRecordKey;

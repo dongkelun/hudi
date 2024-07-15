@@ -81,32 +81,52 @@ public class HoodieBaseBloomIndexCheckFunction
       List<KeyLookupResult> ret = new ArrayList<>();
       try {
         // process one file in each go.
+        // 遍历 (fileId, HoodieKey)
         while (inputItr.hasNext()) {
           Pair<String, HoodieKey> currentTuple = inputItr.next();
           String fileId = currentTuple.getLeft();
           String partitionPath = currentTuple.getRight().getPartitionPath();
           String recordKey = currentTuple.getRight().getRecordKey();
+          // (partitionPath, fileId)
           Pair<String, String> partitionPathFilePair = Pair.of(partitionPath, fileId);
 
           // lazily init state
+          // 延迟初始化状态
           if (keyLookupHandle == null) {
+            // 在 HoodieKeyLookupHandle 的构造方法中会读取保存在Parquet文件中的布隆过滤器信息
+            // 将其反序列化为 BloomFilter
             keyLookupHandle = new HoodieKeyLookupHandle(config, hoodieTable, partitionPathFilePair);
           }
 
           // if continue on current file
+          // 如果继续当前文件
+          // (partitionPath, fileId) 确定一个文件，一个 fileId 对应多个HoodieKey，
+          // 所以可能在一个文件上可能遍历多次
+          // 前面已经按照 fileId 排序，所以可以保证一个 fileId 对应的记录是连续的。
           if (keyLookupHandle.getPartitionPathFilePair().equals(partitionPathFilePair)) {
+            // 添加 recordKey
+            // 这里利用布隆过滤器进行二次过滤，将命中(可能存在于该文件中)的 recordKey 添加到 candidateRecordKeys （候选RecordKeys）
+            // bloomFilter.mightContain(recordKey) 判断该recordKey 是否可能存在于该文件
             keyLookupHandle.addKey(recordKey);
-          } else {
+          } else { // 如果上一个文件结束
             // do the actual checking of file & break out
+            // 进行文件的实际检查和分解
+            // 将 keyLookupHandle.getLookupResult 查询结果添加到返回值 ret 中
             ret.add(keyLookupHandle.getLookupResult());
+            // 新文件的 HoodieKeyLookupHandle
             keyLookupHandle = new HoodieKeyLookupHandle(config, hoodieTable, partitionPathFilePair);
+            // 添加 recordKey
+            // 这里利用布隆过滤器进行二次过滤，将命中(可能存在于该文件中)的 recordKey 添加到 candidateRecordKeys （候选RecordKeys）
+            // bloomFilter.mightContain(recordKey) 判断该recordKey 是否可能存在于该文件
             keyLookupHandle.addKey(recordKey);
             break;
           }
         }
 
         // handle case, where we ran out of input, close pending work, update return val
+        // 处理输入不足的情况，关闭待处理的工作，更新返回值
         if (!inputItr.hasNext()) {
+          // 遍历结束，将最后一个文件的 getLookupResult 查询结果添加到返回值 ret 中
           ret.add(keyLookupHandle.getLookupResult());
         }
       } catch (Throwable e) {
